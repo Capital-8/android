@@ -131,4 +131,3 @@ fun OCFile.removeShare(share: OCShare) {
     val sharee = share.toShareeUser()
     sharees.removeAll { it == sharee }
 }
-
