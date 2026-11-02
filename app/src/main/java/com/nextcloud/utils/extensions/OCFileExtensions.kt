@@ -120,27 +120,15 @@ fun OCFile.isLocalETagOutdated(): Boolean {
     return !serverETag.isNullOrEmpty() && etag.eTagChanged(serverETag)
 }
 
-fun OCFile.addShare(share: OCShare) {
-    if (
-        sharees.any { s ->
-            s.userId == share.shareWith &&
-            s.displayName == share.sharedWithDisplayName &&
-            s.shareType == share.shareType
-        }
-    ) return
+private fun OCShare.toShareeUser() = ShareeUser(shareWith, sharedWithDisplayName, shareType)
 
-    val sharee = ShareeUser(
-        share.shareWith,
-        share.sharedWithDisplayName,
-        share.shareType
-    )
-    sharees.add(sharee)
+fun OCFile.addShare(share: OCShare) {
+    val sharee = share.toShareeUser()
+    if (sharee !in sharees) sharees.add(sharee)
 }
 
 fun OCFile.removeShare(share: OCShare) {
-    sharees.removeAll { s ->
-        s.userId == share.shareWith &&
-        s.displayName == share.sharedWithDisplayName &&
-        s.shareType == share.shareType
-    }
+    val sharee = share.toShareeUser()
+    sharees.removeAll { it == sharee }
 }
+
