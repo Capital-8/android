@@ -33,6 +33,7 @@ import com.owncloud.android.lib.common.OwnCloudClient;
 import com.owncloud.android.lib.common.OwnCloudClientFactory;
 import com.owncloud.android.lib.common.UserInfo;
 import com.owncloud.android.lib.common.accounts.AccountUtils;
+import com.owncloud.android.lib.common.operations.OperationCancelledException;
 import com.owncloud.android.lib.common.operations.RemoteOperation;
 import com.owncloud.android.lib.common.operations.RemoteOperationResult;
 import com.owncloud.android.lib.common.operations.RemoteOperationResult.ResultCode;
@@ -56,6 +57,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import androidx.annotation.NonNull;
@@ -116,6 +118,8 @@ public class RefreshFolderOperation extends RemoteOperation {
      * Counter of conflicts found between local and remote files
      */
     private final AtomicInteger mConflictsFound = new AtomicInteger();
+
+    private final AtomicBoolean cancellationRequested = new AtomicBoolean(false);
 
     /**
      * Counter of failed operations in synchronization of kept-in-sync files
@@ -269,6 +273,10 @@ public class RefreshFolderOperation extends RemoteOperation {
      */
     public List<OCFile> getChildren() {
         return mChildren;
+    }
+
+    public void cancel() {
+        cancellationRequested.set(true);
     }
 
     /**
@@ -488,6 +496,9 @@ public class RefreshFolderOperation extends RemoteOperation {
 
         if (result.isSuccess()) {
             synchronizeData(result.getData());
+            if (cancellationRequested.get()) {
+                return new RemoteOperationResult<>(new OperationCancelledException());
+            }
             if (mConflictsFound.get() > 0 || mFailsInKeptInSyncFound.get() > 0) {
                 result = new RemoteOperationResult(ResultCode.SYNC_CONFLICT);
                 // should be a different result code, but will do the job
@@ -656,6 +667,11 @@ public class RefreshFolderOperation extends RemoteOperation {
         }
 
         UnifiedShareSharees.fillBlocking(user, updatedFiles);
+
+        if (cancellationRequested.get()) {
+            Log_OC.d(TAG, "Refresh of " + mLocalFolder.getRemotePath() + " cancelled, local data is not updated");
+            return;
+        }
 
         fileDataStorageManager.saveFolder(remoteFolder, updatedFiles, localFilesMap.values());
 
