@@ -49,7 +49,7 @@ import com.nextcloud.utils.extensions.showToast
 import com.nextcloud.utils.mdm.MDMConfig
 import com.owncloud.android.authentication.GlobalPassCodeProtectionCallbacks
 import com.owncloud.android.authentication.PassCodeManager
-import com.owncloud.android.datamodel.ArbitraryDataProviderImpl
+import com.owncloud.android.datamodel.ArbitraryDataProvider
 import com.owncloud.android.datamodel.ReceiverFlag
 import com.owncloud.android.datamodel.SyncedFolderProvider
 import com.owncloud.android.datamodel.ThumbnailsCacheManager
@@ -71,7 +71,6 @@ import dagger.android.DispatchingAndroidInjector
 import dagger.android.HasAndroidInjector
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings
 import org.conscrypt.Conscrypt
-import java.lang.ref.WeakReference
 import java.security.NoSuchAlgorithmException
 import java.security.Security
 import javax.inject.Inject
@@ -137,6 +136,9 @@ open class MainApp :
     @Inject
     lateinit var viewThemeUtilsProvider: Provider<ViewThemeUtils>
 
+    @Inject
+    lateinit var arbitraryDataProvider: ArbitraryDataProvider
+
     private val restrictionsFilter = IntentFilter(Intent.ACTION_APPLICATION_RESTRICTIONS_CHANGED)
 
     private val restrictionsReceiver = object : BroadcastReceiver() {
@@ -184,7 +186,6 @@ open class MainApp :
     @SuppressFBWarnings("ST")
     override fun onCreate() {
         enableStrictMode()
-        val viewThemeUtils = viewThemeUtilsProvider.get()
         setAppTheme(preferences.getDarkThemeMode())
         super.onCreate()
 
@@ -216,10 +217,9 @@ open class MainApp :
             powerManagementService,
             backgroundJobManager,
             clock,
-            viewThemeUtils,
             walledCheckCache
         )
-        initContactsBackup(accountManager, backgroundJobManager)
+        initContactsBackup(arbitraryDataProvider,accountManager, backgroundJobManager)
         AppNotificationChannels.create(getAppContext())
         scheduleBackgroundJobs()
         registerActivityLifecycleCallbacks(GlobalPassCodeProtectionCallbacks(onboarding, passCodeManager))
@@ -307,7 +307,7 @@ open class MainApp :
             OwnCloudClientManagerFactory.setProxyPort(port)
             Log_OC.d(TAG, "Proxy configuration successfully set")
         } catch (e: Resources.NotFoundException) {
-            Log_OC.e(TAG, "Proxy config cannot able to set due to: \$e")
+            Log_OC.e(TAG, "Proxy config cannot able to set due to: $e")
         }
     }
 
@@ -361,7 +361,7 @@ open class MainApp :
     private fun disableDeathOnFileUriExposure() {
         try {
             StrictMode::class.java.getMethod("disableDeathOnFileUriExposure").invoke(null)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Log_OC.d(DEBUG_TAG, "Failed to disable uri exposure")
         }
     }
@@ -418,7 +418,7 @@ open class MainApp :
         private const val HIGHEST_SECURITY_PROVIDER_POSITION = 1
         private const val NO_PACKAGE_INFO_FLAGS = 0
 
-        private var appContext: WeakReference<Context>? = null
+        private lateinit var appContext: Context
         private var storagePath: String? = null
         private var appComponent: AppComponent? = null
 
@@ -431,7 +431,7 @@ open class MainApp :
             private set
 
         private fun initGlobalContext(context: Context) {
-            appContext = WeakReference(context)
+            appContext = context
         }
 
         @JvmStatic
@@ -446,12 +446,11 @@ open class MainApp :
             get() = getAppContext().resources.getBoolean(R.bool.is_branded_plus_client)
 
         @JvmStatic
-        fun initContactsBackup(accountManager: UserAccountManager?, backgroundJobManager: BackgroundJobManager?) {
-            if (accountManager == null || backgroundJobManager == null) {
-                return
-            }
-
-            val arbitraryDataProvider = ArbitraryDataProviderImpl(getAppContext())
+        fun initContactsBackup(
+            arbitraryDataProvider: ArbitraryDataProvider,
+            accountManager: UserAccountManager,
+            backgroundJobManager: BackgroundJobManager
+        ) {
             accountManager.allUsers
                 .filter {
                     arbitraryDataProvider.getBooleanValue(
@@ -472,7 +471,6 @@ open class MainApp :
             powerManagementService: PowerManagementService,
             backgroundJobManager: BackgroundJobManager,
             clock: Clock,
-            viewThemeUtils: ViewThemeUtils?,
             walledCheckCache: WalledCheckCache?
         ) {
             val appContext = getAppContext()
@@ -527,7 +525,7 @@ open class MainApp :
         fun string(@StringRes id: Int, args: Any?): String = getAppContext().getString(id, args)
 
         @JvmStatic
-        fun getAppContext(): Context = appContext!!.get()!!
+        fun getAppContext(): Context = appContext
 
         @JvmStatic
         fun getStoragePath(): String? = storagePath
